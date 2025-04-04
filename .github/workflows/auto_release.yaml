@@ -1,0 +1,52 @@
+name: Auto Release APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Check tests integrity
+        run: |
+          GENERATED_HASH=$(sha256sum test/widget_teacher_tests.dart | awk '{ print $1 }')
+          EXPECTED_HASH="fddff3aa4978de5f311fff110f0ef11b8aadc441aa6ba4db27d5c1343f5370e6"
+          if [ "$GENERATED_HASH" != "$EXPECTED_HASH" ]; then
+            echo "🚨🚓 Ficheiro de testes modificado, vamos chamar-te a oral! 🚨🚓"
+            exit 1
+          fi
+
+      - name: Dart Analyze check
+        run: dart analyze
+
+      - name: Automated Tests check
+        run: flutter test
+
+      - name: Build APK
+        run: flutter build apk --debug
+
+      - name: Upload APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          release_name: "Latest APK"
+          files: build/app/outputs/flutter-apk/app-debug.apk
+          body: ${{ env.BUILD_DATE }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
