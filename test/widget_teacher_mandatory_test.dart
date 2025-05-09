@@ -1,46 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intl/intl.dart';
-import 'package:prjectcm/data/sns_repository.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:prjectcm/connectivity_module.dart';
+import 'package:prjectcm/data/http_sns_datasource.dart';
+import 'package:prjectcm/data/sqflite_sns_datasource.dart';
+import 'package:prjectcm/location_module.dart';
 import 'package:prjectcm/main.dart';
 import 'package:prjectcm/models/hospital.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import 'package:testable_form_field/testable_form_field.dart';
+
+import 'fake_connectivity_module.dart';
+import 'fake_http_sns_datasource.dart';
+import 'fake_location_module.dart';
+import 'fake_sqflite_sns_datasource.dart';
 
 void main() {
   runWidgetTests();
 }
 
 void runWidgetTests() {
-  final testHospitals = [
-    Hospital(
-      id: 3,
-      name: 'hospital 1',
-      latitude: 40.7128,
-      longitude: -74.0060,
-      address: 'Em cima do monte',
-      phoneNumber: 1234567,
-      email: 'noreply@hospital1.pt',
-      district: 'Lisbon',
-      hasEmergency: true,
-    ),
-    Hospital(
-      id: 4,
-      name: 'hospital 2',
-      latitude: 43.7128,
-      longitude: -71.0060,
-      address: 'Junto à praia',
-      phoneNumber: 23445456,
-      email: 'noreply@hospital2.pt',
-      district: 'Porto',
-      hasEmergency: false,
-    ),
-  ];
 
   testWidgets('Has navigation bar with 4 options', (WidgetTester tester) async {
     await tester.pumpWidget(MultiProvider(
       providers: [
-        Provider<SnsRepository>.value(value: SnsRepository()),
+        Provider<HttpSnsDataSource>.value(value: FakeHttpSnsDataSource()),
+        Provider<SqfliteSnsDataSource>.value(value: FakeSqfliteSnsDataSource()),
+        Provider<LocationModule>.value(value: FakeLocationModule()),
+        Provider<ConnectivityModule>.value(value: FakeConnectivityModule()),
       ],
       child: const MyApp(),
     ));
@@ -53,26 +41,19 @@ void runWidgetTests() {
     expect(find.byType(NavigationDestination), findsNWidgets(4),
         reason: "Deveriam existir 4 NavigationDestination dentro da NavigationBar");
 
-    for (String key in [
-      'dashboard-bottom-bar-item',
-      'lista-bottom-bar-item',
-      'mapa-bottom-bar-item',
-      'avaliacoes-bottom-bar-item'
-    ]) {
-      expect(find.byKey(Key(key)), findsOneWidget, reason: "Deveria existir um NavigationDestination com a key '$key'");
+    for (String key in ['dashboard-bottom-bar-item', 'lista-bottom-bar-item', 'mapa-bottom-bar-item', 'avaliacoes-bottom-bar-item']) {
+      expect(find.byKey(Key(key)), findsOneWidget,
+          reason: "Deveria existir um NavigationDestination com a key '$key'");
     }
   });
 
   testWidgets('Show hospitals list', (WidgetTester tester) async {
-    final snsRepository = SnsRepository();
-
-    for (var hospital in testHospitals) {
-      snsRepository.insertHospital(hospital);
-    }
-
     await tester.pumpWidget(MultiProvider(
       providers: [
-        Provider<SnsRepository>.value(value: snsRepository),
+        Provider<HttpSnsDataSource>.value(value: FakeHttpSnsDataSource()),
+        Provider<SqfliteSnsDataSource>.value(value: FakeSqfliteSnsDataSource()),
+        Provider<LocationModule>.value(value: FakeLocationModule()),
+        Provider<ConnectivityModule>.value(value: FakeConnectivityModule()),
       ],
       child: const MyApp(),
     ));
@@ -105,18 +86,84 @@ void runWidgetTests() {
     final Finder secondTileTextFinder = find.descendant(of: listTilesFinder.last, matching: find.text("hospital 2"));
     expect(secondTileTextFinder, findsOneWidget,
         reason: "O segundo ListTile deveria conter um Text com o texto 'hospital 2'");
+
+  });
+
+
+  // check if it shows a circularprogressindicator while it doesn't receive an answer from the server
+  testWidgets('Show hospitals list with delay', (WidgetTester tester) async {
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        Provider<HttpSnsDataSource>.value(value: FakeHttpSnsDataSource(delay: 1)),
+        Provider<SqfliteSnsDataSource>.value(value: FakeSqfliteSnsDataSource()),
+        Provider<LocationModule>.value(value: FakeLocationModule()),
+        Provider<ConnectivityModule>.value(value: FakeConnectivityModule()),
+      ],
+      child: const MyApp(),
+    ));
+
+    // have to wait for async initializations
+    await tester.pumpAndSettle(Duration(milliseconds: 200));
+
+    var listBottomBarItemFinder = find.byKey(Key('lista-bottom-bar-item'));
+    expect(listBottomBarItemFinder, findsOneWidget,
+        reason: "Deveria existir um NavigationDestination com a key 'lista-bottom-bar-item'");
+    await tester.tap(listBottomBarItemFinder);
+    await tester.pump();    // one pump for circular progress indicator
+    await tester.pump(Duration(milliseconds: 100));  // another pump should still show circular progress indicator
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget,
+        reason: "Enquanto carrega a lista de hospitais, devia mostrar um CircularProgressIndicator");
+
+    // wait for the response
+    await tester.pumpAndSettle(Duration(seconds: 1));
+
+    final Finder listViewFinder = find.byKey(Key('list-view'));
+    expect(listViewFinder, findsOneWidget,
+        reason: "Após mostrar o CircularProgressIndicator, deveria existir um ListView com a key 'list-view'");
+    expect(tester.widget(listViewFinder), isA<ListView>(),
+        reason: "O widget com a key 'list-view' deveria ser um ListView");
+  });
+
+
+  testWidgets('Show hospitals map', (WidgetTester tester) async {
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        Provider<HttpSnsDataSource>.value(value: FakeHttpSnsDataSource()),
+        Provider<SqfliteSnsDataSource>.value(value: FakeSqfliteSnsDataSource()),
+        Provider<LocationModule>.value(value: FakeLocationModule()),
+        Provider<ConnectivityModule>.value(value: FakeConnectivityModule()),
+      ],
+      child: const MyApp(),
+    ));
+
+    // have to wait for async initializations
+    await tester.pumpAndSettle(Duration(milliseconds: 200));
+
+    var mapBottomBarItemFinder = find.byKey(Key('mapa-bottom-bar-item'));
+    expect(mapBottomBarItemFinder, findsOneWidget,
+        reason: "Deveria existir um NavigationDestination com a key 'mapa-bottom-bar-item'");
+    await tester.tap(mapBottomBarItemFinder);
+    await tester.pumpAndSettle();
+
+    // Find the GoogleMap widget
+    final Finder mapFinder = find.byType(GoogleMap);
+    expect(mapFinder, findsOneWidget,
+        reason: "Depois de saltar para o ecrã com o mapa, deveria existir um widget do tipo GoogleMap");
+
+    // Extract the GoogleMap widget
+    final GoogleMap googleMap = tester.widget<GoogleMap>(mapFinder);
+    // Ensure the map contains exactly two markers
+    expect(googleMap.markers.length, 2, reason: "O mapa deve conter exatamente 2 marcadores");
   });
 
   testWidgets('Show hospitals list and detail', (WidgetTester tester) async {
-    final snsRepository = SnsRepository();
-
-    for (var hospital in testHospitals) {
-      snsRepository.insertHospital(hospital);
-    }
-
     await tester.pumpWidget(MultiProvider(
       providers: [
-        Provider<SnsRepository>.value(value: snsRepository),
+        Provider<HttpSnsDataSource>.value(value: FakeHttpSnsDataSource()),
+        Provider<SqfliteSnsDataSource>.value(value: FakeSqfliteSnsDataSource()),
+        Provider<LocationModule>.value(value: FakeLocationModule()),
+        Provider<ConnectivityModule>.value(value: FakeConnectivityModule()),
       ],
       child: const MyApp(),
     ));
@@ -135,48 +182,39 @@ void runWidgetTests() {
     final tiles = List.from(tester.widgetList<ListTile>(listTilesFinder));
     expect(tiles.length, 2);
 
-    // tap the first tile
     await tester.tap(listTilesFinder.first);
     await tester.pumpAndSettle();
 
+    // // just for demo purposes
+    // await Future.delayed(Duration(seconds: 10));
+
     // find if the text 'hospital1' is present
     final Finder hospital1Finder = find.text('hospital 1');
-    expect(hospital1Finder, findsAtLeastNWidgets(1),
-        reason: "Deveria existir pelo menos um Text com o texto 'hospital 1' (primeiro elemento da lista)");
-    expect(find.text('Em cima do monte'), findsOneWidget,
-        reason: "Deveria existir pelo menos um Text com o texto 'Em cima do monte' (morada do primeiro elemento da lista)");
+    expect(hospital1Finder, findsAtLeastNWidgets(1), reason: "Deveria existir pelo menos um Text com o texto 'hospital 1' (primeiro elemento da lista)");
 
     // go back
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // tap the second tile
     final Finder listTilesFinder2 = find.descendant(of: find.byKey(Key('list-view')), matching: find.byType(ListTile));
     await tester.tap(listTilesFinder2.at(1));
     await tester.pumpAndSettle();
 
     // find if the text 'hospital2' is present
     final Finder hospital2Finder = find.text('hospital 2');
-    expect(hospital2Finder, findsAtLeastNWidgets(1),
-        reason: "Deveria existir pelo menos um Text com o texto 'hospital 2' (segundo elemento da lista)");
-    expect(find.text('Junto à praia'), findsOneWidget,
-        reason: "Deveria existir pelo menos um Text com o texto 'Junto à praia' (morada do segundo elemento da lista)");
+    expect(hospital2Finder, findsAtLeastNWidgets(1), reason: "Deveria existir pelo menos um Text com o texto 'hospital 2' (segundo elemento da lista)");
   });
 
   testWidgets('Insert evaluation and show detail', (WidgetTester tester) async {
-    final snsRepository = SnsRepository();
-
-    for (var hospital in testHospitals) {
-      snsRepository.insertHospital(hospital);
-    }
-
     await tester.pumpWidget(MultiProvider(
       providers: [
-        Provider<SnsRepository>.value(value: snsRepository),
+        Provider<HttpSnsDataSource>.value(value: FakeHttpSnsDataSource()),
+        Provider<SqfliteSnsDataSource>.value(value: FakeSqfliteSnsDataSource()),
+        Provider<LocationModule>.value(value: FakeLocationModule()),
+        Provider<ConnectivityModule>.value(value: FakeConnectivityModule()),
       ],
       child: const MyApp(),
     ));
-
 
     // have to wait for async initializations
     await tester.pumpAndSettle(Duration(milliseconds: 200));
@@ -217,7 +255,7 @@ void runWidgetTests() {
 
     // using "an hour ago" instead of current time since probably the form field will have its default value set to now
     final aHourAgo = DateTime.now().subtract(Duration(hours: 1));
-    hospitalSelectionFormField.setValue(testHospitals[0]);
+    hospitalSelectionFormField.setValue(FakeHttpSnsDataSource().hospitals[0]);
     // ratingFormField.setValue(4);  // don't set the value for now
     dateTimeFormField.setValue(aHourAgo);
     commentFormField.setValue("No comments");
@@ -234,11 +272,12 @@ void runWidgetTests() {
     // it should show a snackbar telling a field is missing
     expect(find.byType(SnackBar), findsOneWidget);
 
-    ratingFormField.setValue(5); // set the missing value now
+    ratingFormField.setValue(5);  // set the missing value now
 
     final Finder submitButtonViewFinder2 = find.byKey(Key('evaluation-form-submit-button'));
     expect(submitButtonViewFinder2, findsOneWidget,
         reason: "No ecrã do formulário, deveria existir um Widget com a key 'evaluation-form-submit-button'");
+    await tester.ensureVisible(submitButtonViewFinder2);
     await tester.tap(submitButtonViewFinder2);
     await tester.pumpAndSettle();
 
@@ -269,5 +308,7 @@ void runWidgetTests() {
     // find if the text 'No comments' is present
     expect(find.text('No comments'), findsAtLeastNWidgets(1),
         reason: "Deveria existir pelo menos um Text com o texto 'No comments' (texto de uma das avaliações)");
+
   });
+
 }

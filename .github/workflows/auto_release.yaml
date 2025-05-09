@@ -7,34 +7,78 @@ on:
       - main
 
 jobs:
-  build:
-    name: Build APK
+  dart-analyze:
+    name: Dart Analyze
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout Actions
         uses: actions/checkout@v4
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Check tests integrity
-        run: |
-          GENERATED_HASH=$(sha256sum test/widget_teacher_tests.dart | awk '{ print $1 }')
-          EXPECTED_HASH="fddff3aa4978de5f311fff110f0ef11b8aadc441aa6ba4db27d5c1343f5370e6"
-          if [ "$GENERATED_HASH" != "$EXPECTED_HASH" ]; then
-            echo "🚨🚓 Ficheiro de testes modificado, vamos chamar-te a oral! 🚨🚓"
-            exit 1
-          fi
+      - name: Setup Flutter
+        uses: ./.github/actions/setup_flutter
 
       - name: Dart Analyze check
         run: dart analyze
 
-      - name: Automated Tests check
-        run: flutter test
+  optional-tests:
+    name: Optional Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Actions
+        uses: actions/checkout@v4
+
+      - name: Check tests integrity
+        run: |
+          GENERATED_HASH=$(sha256sum test/widget_teacher_optional_test.dart | awk '{ print $1 }')
+          echo "GENERATED_HASH: $GENERATED_HASH"
+          if [ "$GENERATED_HASH" != "$EXPECTED_HASH" ]; then
+            echo "🚨🚓 Não deves modificar os testes, se não foram modificados contacta o professor 🚨🚓"
+            exit 1
+          fi
+        env:
+          EXPECTED_HASH: ${{ secrets.PROJECT_PART2_OPTIONAL_TEST_HASH }}
+
+      - name: Setup Flutter
+        uses: ./.github/actions/setup_flutter
+
+      - name: Mandatory Tests
+        run: flutter test test/widget_teacher_optional_test.dart
+
+  mandatory-tests:
+    name: Mandatory Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Actions
+        uses: actions/checkout@v4
+
+      - name: Check tests integrity
+        run: |
+          GENERATED_HASH=$(sha256sum test/widget_teacher_mandatory_test.dart | awk '{ print $1 }')
+          echo "GENERATED_HASH: $GENERATED_HASH"
+          if [ "$GENERATED_HASH" != "$EXPECTED_HASH" ]; then
+            echo "🚨🚓 Não deves modificar os testes, se não foram modificados contacta o professor 🚨🚓"
+            exit 1
+          fi
+        env:
+          EXPECTED_HASH: ${{ secrets.PROJECT_PART2_MANDATORY_TEST_HASH }}
+
+      - name: Setup Flutter
+        uses: ./.github/actions/setup_flutter
+
+      - name: Mandatory Tests
+        run: flutter test test/widget_teacher_mandatory_test.dart
+
+  build:
+    name: Build APK
+    needs: [dart-analyze, mandatory-tests]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Actions
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: ./.github/actions/setup_flutter
 
       - name: Build APK
         run: flutter build apk --debug
