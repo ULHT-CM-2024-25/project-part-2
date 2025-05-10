@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:prjectcm/data/sqflite_sns_datasource.dart';
-import 'package:prjectcm/models/hospital.dart';
 import 'package:prjectcm/models/evaluation_report.dart';
+import 'package:prjectcm/models/hospital.dart';
 
 class FakeSqfliteSnsDataSource extends SqfliteSnsDataSource {
 
