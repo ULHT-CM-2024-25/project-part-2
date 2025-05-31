@@ -26,7 +26,15 @@ class FakeSqfliteSnsDataSource extends SqfliteSnsDataSource {
   @override
   Future<void> insertHospital(Hospital hospital) async {
     debugPrint('inserting hospital ${hospital.name}');
-    hospitals.add(hospital);
+    final index = hospitals.indexWhere((h) => h.id == hospital.id);
+
+    if (index != -1) {  // caso já exista, substitui o hospital
+      final reports = hospitals[index].reports;
+      hospitals[index] = hospital;
+      hospital.reports = reports;
+    } else {
+      hospitals.add(hospital);
+    }
   }
 
   @override
