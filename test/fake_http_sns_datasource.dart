@@ -68,4 +68,10 @@ class FakeHttpSnsDataSource extends HttpSnsDataSource {
     return [];
   }
 
+  @override
+  Future<void> insertWaitingTime(int hospitalId, dynamic waitingTime) async {
+    // TODO: implement insertWaitingTime
+    throw UnimplementedError();
+  }
+
 }

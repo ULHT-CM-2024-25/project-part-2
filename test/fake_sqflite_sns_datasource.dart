@@ -46,4 +46,10 @@ class FakeSqfliteSnsDataSource extends SqfliteSnsDataSource {
   Future<List<Hospital>> getHospitalsByName(String name) async {
     return hospitals.where((element) => element.name.toLowerCase().contains(name.toLowerCase())).toList();
   }
+
+  @override
+  Future<void> insertWaitingTime(int hospitalId, dynamic waitingTime) async {
+    // TODO: implement insertWaitingTime
+    throw UnimplementedError();
+  }
 }

@@ -17,4 +17,6 @@ abstract class SnsDataSource {
 
   Future<List<WaitingTime>> getHospitalWaitingTimes(int hospitalId);
 
+  Future<void> insertWaitingTime(int hospitalId, dynamic waitingTime);
+
 }
